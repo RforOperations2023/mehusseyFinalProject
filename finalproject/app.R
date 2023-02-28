@@ -1,18 +1,48 @@
 library(shiny)
-library(leaflet)
-library(httr)
+library(readr)
 library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(RColorBrewer)
+library(scales)
+library(leaflet)
+library(leaflet.extras)
+library(sf)
+library(rgeos)
+library(tidyr)
+
+# Load the shapefile data for the boroughs
+boro_shapes <- st_read("BoroughBoundaries.geojson")
+
+#Load the shooting data
+nypd <- read_csv("NYPD_Shooting_Incident_Data__Historic_.csv", 
+                 col_types = cols(OCCUR_DATE = col_date(format = "%m/%d/%Y")))
+
+nypd <- nypd %>%
+  mutate(OCCUR_YEAR = year(ymd(OCCUR_DATE))) #creating a year only column 
+
+# Define colors for each boro
+boro_colors <- c("Brooklyn" = "#FF0000", "Queens" = "#00FF00", 
+                 "Manhatten" = "#0000FF", "Bronx" = "#FFA500", 
+                 "Staten Island" = "#800080")
+
 
 ui <- fluidPage(
-  titlePanel("New York City Crime Map"),
+  titlePanel("New York Map"),
   sidebarLayout(
     sidebarPanel(
-      selectInput("crimeType", "Crime Type", choices = c("All", "Murder", "Assault", "Robbery", "Burglary", "Theft", "Motor Vehicle Theft"), selected = "All"),
-      selectInput("year", "Year", choices = c(2019, 2020, 2021), selected = 2021),
-      selectInput(inputId = "neighborhood",
-                  label = "Select one or more neighboorhods for all graphs, map and table:",
-                  choices = unique(sort(crime$Ward)),
-                  selected = "4", 
+      checkboxGroupInput(inputId ="boro", 
+                  label = "Select a Borough", 
+                  choices = c("Brooklyn", "Queens", "Manhatten", "Bronx", "Staten Island"), 
+                  selected = NA),
+      selectInput(inputId = "year", 
+                  label = "Select a Year", 
+                  choices = c(2019, 2020, 2021), 
+                  selected = 2021),
+      selectInput(inputId = "muder",
+                  label = "Specify if the shooting was fatal or not:",
+                  choices = unique(sort(nypd$STATISTICAL_MURDER_FLAG)),
+                  selected = NA, 
                   multiple = TRUE),
     ),
     mainPanel(
@@ -21,45 +51,25 @@ ui <- fluidPage(
   )
 )
 
+# Define server
 server <- function(input, output) {
-  url <- "https://data.cityofnewyork.us/resource/833y-fsy8.json"
-  response <- GET(url, query = list($where = paste0("year(occur_date)=", input$year)))
-  data <- content(response, as = "text") %>% 
-    fromJSON(flatten = TRUE) %>% 
-    select(incident_key, occur_date, occur_time, boro, precinct, jurisdiction_code, location_desc, statistical_murder_flag, perp_age_group, perp_sex, perp_race, vic_age_group, vic_sex, vic_race, latitude, longitude)
   
-  filtered_data <- reactive({
-    if (input$crimeType == "All") {
-      data
-    } else {
-      data %>% filter(location_desc == input$crimeType)
-    }
+  filtered_nypd <- reactiveVal(nypd)
+  
+  observe({
+    filtered_nypd(nypd %>% filter(OCCUR_YEAR == input$year & boro_name %in% input$boro))
   })
   
-  output$map <- renderLeaflet({
+  output$nypd_map <- renderLeaflet({
     leaflet() %>%
-      addProviderTiles(providers$CartoDB.Positron) %>%
-      addMarkers(data = filtered_data(), 
-                 clusterOptions = markerClusterOptions(),
-                 label = ~as.character(incident_key),
-                 popup = ~paste0("<b>Date:</b> ", occur_date, "<br>",
-                                 "<b>Time:</b> ", occur_time, "<br>",
-                                 "<b>Borough:</b> ", boro, "<br>",
-                                 "<b>Location:</b> ", location_desc, "<br>",
-                                 "<b>Perpetrator Age:</b> ", perp_age_group, "<br>",
-                                 "<b>Perpetrator Sex:</b> ", perp_sex, "<br>",
-                                 "<b>Perpetrator Race:</b> ", perp_race, "<br>",
-                                 "<b>Victim Age:</b> ", vic_age_group, "<br>",
-                                 "<b>Victim Sex:</b> ", vic_sex, "<br>",
-                                 "<b>Victim Race:</b> ", vic_race, "<br>",
-                                 "<b>Latitude:</b> ", latitude, "<br>",
-                                 "<b>Longitude:</b> ", longitude, "<br>")
-      ) %>%
-      addLayersControl(
-        overlayGroups = c("Markers"),
-        options = layersControlOptions(collapsed = FALSE)
-      )
+      addTiles(urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", 
+               attribution = "Google", group = "Google") %>%  
+      addProviderTiles(provider = providers$Wikimedia, group = "Wiki") %>%
+      setView(-74.0060, 40.7128, 9) %>%
+      addPolygons(data = boro_shapes, color = ~boro_colors, group = "boro_name") %>%
+      addMarkers(data = filtered_nypd(), clusterOptions = markerClusterOptions())
   })
 }
 
+# Run the app
 shinyApp(ui = ui, server = server)

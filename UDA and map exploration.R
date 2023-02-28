@@ -13,11 +13,12 @@ library(tidyr)
 # Load the shapefile data for the boroughs
 boro_shapes <- st_read("BoroughBoundaries.geojson")
 
+#Load the shooting data
 nypd <- read_csv("NYPD_Shooting_Incident_Data__Historic_.csv", 
                                                   col_types = cols(OCCUR_DATE = col_date(format = "%m/%d/%Y")))
 
 nypd <- nypd %>%
-  mutate(OCCUR_YEAR = year(ymd(OCCUR_DATE)))
+  mutate(OCCUR_YEAR = year(ymd(OCCUR_DATE))) #creating a year only column 
 
 View(nypd)
 
