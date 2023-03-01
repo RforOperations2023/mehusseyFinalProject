@@ -38,7 +38,7 @@ ui <- fluidPage(
       checkboxGroupInput(inputId ="boro", 
                   label = "Select a Borough", 
                   choices = c("Brooklyn", "Queens", "Manhatten", "Bronx", "Staten Island"), 
-                  selected = NA),
+                  selected = "Manhatten"),
       selectInput(inputId = "year", 
                   label = "Select a Year", 
                   choices = c(2019, 2020, 2021), 
@@ -47,14 +47,28 @@ ui <- fluidPage(
       selectInput(inputId = "death",
                   label = "Specify if the shooting was fatal or not:",
                   choices = unique(sort(nypd$STATISTICAL_MURDER_FLAG)),
-                  selected = NA, 
+                  selected = "FALSE", 
                   multiple = TRUE),
+      #add a download button
+      downloadButton("downloadData", "Download data")
     ),
     mainPanel(
-      leafletOutput("map")
+      tabsetPanel(type = "tabs",
+                  tabPanel("Map",
+                           fluidRow(leafletOutput(outputId = "map"))
+                           ),
+                  tabPanel("Graphs",
+                           fluidRow(
+                             plotlyOutput(outputId = "bar")),
+                           fluidRow(
+                             plotlyOutput(outputId = "pie"))
+                           ),
+                  tabPanel("Data Table",
+                           fluidRow(DT::dataTableOutput(outputId = "datatable"))
+                           ))
+      )
     )
   )
-)
 
 # Define server
 server <- function(input, output) {
@@ -82,16 +96,52 @@ server <- function(input, output) {
       setView(-74.0060, 40.7128, 9) %>%
       addMarkers(data = filtered_nypd(), clusterOptions = markerClusterOptions())
   })
-}
 
 #CREATING POLYGON LAYERS WITH BOROUGHS
 observe({
   boroInf <- filtered_boro()
   leafletProxy("map", data = boroInf) %>%
     clearGroup(group = "Boroughs") %>%
-    addPolygons(popup = ~paste0("<b>", LABEL, "</b>"), group = "Boroughs", layerId = ~boro_names, fill = FALSE, color = ~boro_colors)
+    addPolygons(popup = ~paste0("<b>", LABEL, "</b>"), 
+                group = "Boroughs", layerId = ~boro_name, color = ~boro_colors)
 })
 
+#BAR CHART OUTPUT
+output$bar <- renderPlotly({
+  year_count <- data.frame(table(nypd$OCCUR_YEAR))
+  ggplotly(
+    ggplot(data = year_count, aes(x = Var1, y = Freq)) +
+      geom_col() +
+      xlab("OCCUR-YEAR") +
+      ylab("Count") +
+      scale_x_discrete(limits = c("2019", "2020", "2021"))
+)
+})
 
+#PIE CHART OUTPUT
+output$pie <- renderPlotly({
+  boro_count <- data.frame(table(nypd$BORO))
+  fig <- plot_ly(boro_count, labels = ~Var1, values = ~Freq, type = 'pie',
+                 text = ~paste0(Freq),
+                 marker = list(colors = c('#c584e4', '#82ac64', '#00bbd4', '#fef769'),
+                               line = list(color = '#FFFFFF', width = 1)))
+})
+
+#DATA TABLE OUTPUT
+output$datatable <- DT::renderDataTable({
+    DT::datatable(data = filtered_boro() 
+    )
+  })
+
+#DOWNLOAD BUTTON
+output$downloadData <- downloadHandler(
+  filename = function() {
+    paste("nypd-data-", Sys.Date(), ".csv", sep = "")
+  },content = function(file) {
+    write.csv(food, file)
+  }
+)
+
+}
 # Run the app
 shinyApp(ui = ui, server = server)
