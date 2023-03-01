@@ -3,6 +3,7 @@ library(readr)
 library(dplyr)
 library(lubridate)
 library(ggplot2)
+library(plotly)
 library(RColorBrewer)
 library(scales)
 library(leaflet)
@@ -93,8 +94,7 @@ server <- function(input, output) {
       addTiles(urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", 
                attribution = "Google", group = "Google") %>%  
       addProviderTiles(provider = providers$Wikimedia, group = "Wiki") %>%
-      setView(-74.0060, 40.7128, 9) %>%
-      addMarkers(data = filtered_nypd(), clusterOptions = markerClusterOptions())
+      setView(-74.0060, 40.7128, 9)
   })
 
 #CREATING POLYGON LAYERS WITH BOROUGHS
@@ -104,6 +104,19 @@ observe({
     clearGroup(group = "Boroughs") %>%
     addPolygons(popup = ~paste0("<b>", LABEL, "</b>"), 
                 group = "Boroughs", layerId = ~boro_name, color = ~boro_colors)
+})
+
+#CLUSTERING BY YEAR 
+observe({
+  nypdInf <- filtered_nypd()
+  leafletProxy("map", data = nypdInf) %>% 
+    clearGroup(group = "Boroughs") %>% 
+    cleaerMarkerClusters() %>% 
+    addAwesomeMarkers(icon = ~homeIcon[OCCUR_YEAR],
+                      clusterOptions = markerClusterOptions(), 
+                      popup = paste0("<b>", LABEL, "</b>"), 
+                      group = "Boroughs", 
+                      layerId = ~index)
 })
 
 #BAR CHART OUTPUT
@@ -138,7 +151,7 @@ output$downloadData <- downloadHandler(
   filename = function() {
     paste("nypd-data-", Sys.Date(), ".csv", sep = "")
   },content = function(file) {
-    write.csv(food, file)
+    write.csv(nypd_filtered(), file)
   }
 )
 
