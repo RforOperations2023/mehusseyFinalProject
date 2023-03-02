@@ -38,8 +38,8 @@ ui <- fluidPage(
     sidebarPanel(
       checkboxGroupInput(inputId ="boro", 
                   label = "Select a Borough", 
-                  choices = c("Brooklyn", "Queens", "Manhatten", "Bronx", "Staten Island"), 
-                  selected = "Manhatten"),
+                  choices = c("Brooklyn", "Queens", "Manhattan", "Bronx", "Staten Island"), 
+                  selected = "Manhattan"),
       selectInput(inputId = "year", 
                   label = "Select a Year", 
                   choices = c(2019, 2020, 2021), 
@@ -102,26 +102,26 @@ observe({
   boroInf <- filtered_boro()
   leafletProxy("map", data = boroInf) %>%
     clearGroup(group = "Boroughs") %>%
-    addPolygons(popup = ~paste0("<b>", LABEL, "</b>"), 
+    addPolygons(popup = ~paste0("<b>", boro_name, "</b>"), 
                 group = "Boroughs", layerId = ~boro_name, color = ~boro_colors)
 })
 
 #CLUSTERING BY YEAR 
 observe({
   nypdInf <- filtered_nypd()
-  leafletProxy("map", data = nypdInf) %>% 
-    clearGroup(group = "Boroughs") %>% 
-    cleaerMarkerClusters() %>% 
-    addAwesomeMarkers(icon = ~homeIcon[OCCUR_YEAR],
-                      clusterOptions = markerClusterOptions(), 
-                      popup = paste0("<b>", LABEL, "</b>"), 
-                      group = "Boroughs", 
-                      layerId = ~index)
+  leafletProxy("map", data = nypdInf) %>%
+    clearGroup(group = "Shootings") %>%
+    clearMarkerClusters() %>%
+    #addAwesomeMarkers(icon = ~icon[OCCUR_YEAR],
+    addCircleMarkers(clusterOptions = markerClusterOptions(),
+                      popup = ~paste0("<b>", boro_name, "</b>"),
+                      group = "Shootings")
 })
 
 #BAR CHART OUTPUT
 output$bar <- renderPlotly({
-  year_count <- data.frame(table(nypd$OCCUR_YEAR))
+  df <- filtered_nypd()
+  year_count <- data.frame(table(df$OCCUR_YEAR))
   ggplotly(
     ggplot(data = year_count, aes(x = Var1, y = Freq)) +
       geom_col() +
@@ -133,7 +133,8 @@ output$bar <- renderPlotly({
 
 #PIE CHART OUTPUT
 output$pie <- renderPlotly({
-  boro_count <- data.frame(table(nypd$BORO))
+  df <- filtered_nypd()
+  boro_count <- data.frame(table(df$BORO))
   fig <- plot_ly(boro_count, labels = ~Var1, values = ~Freq, type = 'pie',
                  text = ~paste0(Freq),
                  marker = list(colors = c('#c584e4', '#82ac64', '#00bbd4', '#fef769'),
