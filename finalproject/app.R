@@ -17,19 +17,31 @@ boro_shapes <- st_read("BoroughBoundaries.geojson")
 
 #Load the shooting data
 nypd <- read_csv("NYPD_Shooting_Incident_Data__Historic_.csv", 
-                 col_types = cols(OCCUR_DATE = col_date(format = "%m/%d/%Y")))
+                 col_types = cols(OCCUR_DATE = col_date(format = "%m/%d/%Y"), 
+                                  OCCUR_TIME = col_time(format = "%H:%M:%S")))
 
 nypd <- nypd %>%
-  mutate(OCCUR_YEAR = year(ymd(OCCUR_DATE))) #creating a year only column 
+  mutate(OCCUR_YEAR = year(ymd(OCCUR_DATE))) %>% 
+  mutate(OCCUR_HOUR = hour(OCCUR_TIME),
+         TIME_OF_DAY = case_when(
+           OCCUR_HOUR >= 6 & OCCUR_HOUR <= 11 ~ "Morning",
+           OCCUR_HOUR >= 12 & OCCUR_HOUR <= 16 ~ "Afternoon",
+           OCCUR_HOUR >= 17 & OCCUR_HOUR <= 21 ~ "Evening",
+           OCCUR_HOUR >= 22 | OCCUR_HOUR <= 5 ~ "Night"),
+         Icon = as.character(STATISTICAL_MURDER_FLAG)) #creating hour only categorical column
 
 nypd_sf <- st_as_sf(nypd, coords = c("Longitude", "Latitude"), crs = 4326)
 joined_data <- st_join(nypd_sf, boro_shapes, join = st_within)
 
+iconSet <- awesomeIconList(
+  "TRUE" = makeAwesomeIcon(icon = "skull-crossbones", markerColor = "red", library = "fa"),
+  "FALSE" = makeAwesomeIcon(icon = "heart-pulse", markerColor = "green", library = "fa")
+)
 
 # Define colors for each boro
-boro_colors <- c("Brooklyn" = "#FF0000", "Queens" = "#00FF00", 
-                 "Manhatten" = "#0000FF", "Bronx" = "#FFA500", 
-                 "Staten Island" = "#800080")
+# boro_colors <- colorFactor(palette = c("#FF0000", "#00FF00", "#0000FF", "#FFA500", "#800080"),
+#                            levels = c("Brooklyn", "Queens", "Manhattan", "Bronx", "Staten Island"),
+#                            ordered = TRUE)
 
 
 ui <- fluidPage(
@@ -48,7 +60,7 @@ ui <- fluidPage(
       selectInput(inputId = "death",
                   label = "Specify if the shooting was fatal or not:",
                   choices = unique(sort(nypd$STATISTICAL_MURDER_FLAG)),
-                  selected = "FALSE", 
+                  selected = "TRUE", 
                   multiple = TRUE),
       #add a download button
       downloadButton("downloadData", "Download data")
@@ -103,31 +115,35 @@ observe({
   leafletProxy("map", data = boroInf) %>%
     clearGroup(group = "Boroughs") %>%
     addPolygons(popup = ~paste0("<b>", boro_name, "</b>"), 
-                group = "Boroughs", layerId = ~boro_name, color = ~boro_colors)
+                group = "Boroughs", layerId = ~boro_name)
 })
 
-#CLUSTERING BY YEAR 
+#CLUSTERING
 observe({
   nypdInf <- filtered_nypd()
   leafletProxy("map", data = nypdInf) %>%
     clearGroup(group = "Shootings") %>%
     clearMarkerClusters() %>%
-    #addAwesomeMarkers(icon = ~icon[OCCUR_YEAR],
-    addCircleMarkers(clusterOptions = markerClusterOptions(),
-                      popup = ~paste0("<b>", boro_name, "</b>"),
-                      group = "Shootings")
+    addAwesomeMarkers(
+      icon = ~iconSet[Icon],
+      popup = ~paste0("<b>Borough: </b>", boro_name,
+                      "<br><b>Time of Day: </b>", TIME_OF_DAY,
+                      "<br><b>Perpetrator Race: </b>", PERP_RACE,
+                      "<br><b>Victim Race: </b>", VIC_RACE),
+      group = "Shootings")
 })
 
 #BAR CHART OUTPUT
 output$bar <- renderPlotly({
   df <- filtered_nypd()
-  year_count <- data.frame(table(df$OCCUR_YEAR))
+  time_count <- data.frame(table(df$TIME_OF_DAY))
   ggplotly(
-    ggplot(data = year_count, aes(x = Var1, y = Freq)) +
+    ggplot(data = time_count, aes(x = Var1, y = Freq, fill = Var1)) +
       geom_col() +
-      xlab("OCCUR-YEAR") +
-      ylab("Count") +
-      scale_x_discrete(limits = c("2019", "2020", "2021"))
+      xlab("Time of Day") +
+      ylab("Number of Shootings") +
+      theme_classic() + 
+      theme(legend.position = "none")
 )
 })
 
@@ -143,7 +159,7 @@ output$pie <- renderPlotly({
 
 #DATA TABLE OUTPUT
 output$datatable <- DT::renderDataTable({
-    DT::datatable(data = filtered_boro() 
+    DT::datatable(data = filtered_nypd() 
     )
   })
 
@@ -152,7 +168,7 @@ output$downloadData <- downloadHandler(
   filename = function() {
     paste("nypd-data-", Sys.Date(), ".csv", sep = "")
   },content = function(file) {
-    write.csv(nypd_filtered(), file)
+    write.csv(filtered_nypd(), file)
   }
 )
 
