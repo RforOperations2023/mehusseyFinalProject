@@ -53,11 +53,10 @@ ui <- fluidPage(theme = shinytheme("sandstone"),
                   label = "Select a Borough", 
                   choices = c("Brooklyn", "Queens", "Manhattan", "Bronx", "Staten Island"), 
                   selected = "Manhattan"),
-      selectInput(inputId = "year", 
+      checkboxGroupInput(inputId = "year", 
                   label = "Select a Year", 
                   choices = c(2019, 2020, 2021), 
-                  selected = 2021,
-                  multiple = TRUE),
+                  selected = 2021),
       selectInput(inputId = "death",
                   label = "Specify if the shooting was fatal or not:",
                   choices = unique(sort(nypd$STATISTICAL_MURDER_FLAG)),
@@ -73,10 +72,12 @@ ui <- fluidPage(theme = shinytheme("sandstone"),
                            ),
                   tabPanel("Graphs",
                            fluidRow(
-                             plotlyOutput(outputId = "bar")),
-                           fluidRow(
-                             plotlyOutput(outputId = "pie"))
+                             plotlyOutput(outputId = "bar")
                            ),
+                           br(), #white space between plots
+                           fluidRow(
+                             plotlyOutput(outputId = "pie")
+                           )),
                   tabPanel("Data Table",
                            fluidRow(DT::dataTableOutput(outputId = "datatable"))
                            ))
@@ -128,6 +129,7 @@ observe({
     addAwesomeMarkers(
       icon = ~iconSet[Icon],
       popup = ~paste0("<b>Borough: </b>", boro_name,
+                      "<br><b>Year Occured: </b>", OCCUR_YEAR,
                       "<br><b>Time of Day: </b>", TIME_OF_DAY,
                       "<br><b>Perpetrator Race: </b>", PERP_RACE,
                       "<br><b>Victim Race: </b>", VIC_RACE),
@@ -143,6 +145,7 @@ output$bar <- renderPlotly({
       geom_col() +
       xlab("Time of Day") +
       ylab("Number of Shootings") +
+      ggtitle("Number of Shootings by Time of Day") +
       theme_classic() + 
       theme(legend.position = "none")
 )
@@ -150,12 +153,14 @@ output$bar <- renderPlotly({
 
 #PIE CHART OUTPUT
 output$pie <- renderPlotly({
-  age_count <- data.frame(table(joined_data$VIC_AGE_GROUP))
+  df2 <- filtered_nypd()
+  age_count <- data.frame(table(df2$VIC_AGE_GROUP))
   plot_ly(age_count, labels = ~Var1, values = ~Freq, type = 'pie',
                  text = ~paste0(Freq),
                  marker = list(colors = c('#c584e4', '#82ac64', '#00bbd4', '#fef769', 
                                                    '#FFA500'),
-                                                   line = list(color = '#FFFFFF', width = 1)))
+                                                   line = list(color = '#FFFFFF', width = 1))) %>%
+    layout(title = "Total Shootings by Victim Age Group")
 })
 
 #DATA TABLE OUTPUT
