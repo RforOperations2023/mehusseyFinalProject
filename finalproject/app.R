@@ -1,4 +1,5 @@
 library(shiny)
+library(shinythemes)
 library(readr)
 library(dplyr)
 library(lubridate)
@@ -44,8 +45,8 @@ iconSet <- awesomeIconList(
 #                            ordered = TRUE)
 
 
-ui <- fluidPage(
-  titlePanel("New York Map"),
+ui <- fluidPage(theme = shinytheme("sandstone"),
+  titlePanel("New York City Shootings 2019-2021"),
   sidebarLayout(
     sidebarPanel(
       checkboxGroupInput(inputId ="boro", 
@@ -149,17 +150,23 @@ output$bar <- renderPlotly({
 
 #PIE CHART OUTPUT
 output$pie <- renderPlotly({
-  df <- filtered_nypd()
-  boro_count <- data.frame(table(df$BORO))
-  fig <- plot_ly(boro_count, labels = ~Var1, values = ~Freq, type = 'pie',
+  age_count <- data.frame(table(joined_data$VIC_AGE_GROUP))
+  plot_ly(age_count, labels = ~Var1, values = ~Freq, type = 'pie',
                  text = ~paste0(Freq),
-                 marker = list(colors = c('#c584e4', '#82ac64', '#00bbd4', '#fef769'),
-                               line = list(color = '#FFFFFF', width = 1)))
+                 marker = list(colors = c('#c584e4', '#82ac64', '#00bbd4', '#fef769', 
+                                                   '#FFA500'),
+                                                   line = list(color = '#FFFFFF', width = 1)))
 })
 
 #DATA TABLE OUTPUT
 output$datatable <- DT::renderDataTable({
-    DT::datatable(data = filtered_nypd() 
+    DT::datatable(data = filtered_nypd() %>% 
+                    select(OCCUR_DATE, TIME_OF_DAY, BORO,
+                           PRECINCT, STATISTICAL_MURDER_FLAG,
+                           PERP_AGE_GROUP, PERP_SEX, PERP_RACE,
+                           VIC_AGE_GROUP, VIC_SEX, VIC_RACE),
+                  options = list(pageLength = 10,
+                                 rownames = FALSE)
     )
   })
 
